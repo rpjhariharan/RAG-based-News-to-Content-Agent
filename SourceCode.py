@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 from PIL import Image
 from io import BytesIO
-from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
 import openai
@@ -28,12 +27,30 @@ client = chromadb.Client(Settings(
 ))
 collection = client.get_or_create_collection("news_articles")
 
-# Initialize models with caching for performance
-@st.cache_resource
-def load_embedding_model():
-    return SentenceTransformer('all-MiniLM-L6-v2')
+# Function to generate embeddings using OpenAI's Embedding API
+def get_openai_embeddings(texts):
+    try:
+        response = openai.Embedding.create(
+            input=texts,
+            model="text-embedding-ada-002"
+        )
+        embeddings = [data['embedding'] for data in response['data']]
+        return embeddings
+    except Exception as e:
+        st.error(f"Error generating embeddings with OpenAI: {e}")
+        return []
 
-embedding_model = load_embedding_model()
+def get_openai_embedding(text):
+    try:
+        response = openai.Embedding.create(
+            input=text,
+            model="text-embedding-ada-002"
+        )
+        embedding = response['data'][0]['embedding']
+        return embedding
+    except Exception as e:
+        st.error(f"Error generating embedding with OpenAI: {e}")
+        return []
 
 # Define NewsAPI only
 NEWS_APIS = {
@@ -87,7 +104,10 @@ def sanitize_metadata(metadata):
 def upsert_articles_to_chroma(articles):
     try:
         texts = [a.get('content', '') for a in articles]
-        embeddings = embedding_model.encode(texts).tolist()
+        embeddings = get_openai_embeddings(texts)
+        if not embeddings:
+            st.error("Failed to generate embeddings for the articles.")
+            return
         ids = [f"doc_{i}_{int(datetime.now().timestamp())}" for i in range(len(articles))]  # Unique IDs
         metadatas = [sanitize_metadata(a) for a in articles]
         collection.add(documents=texts, embeddings=embeddings, ids=ids, metadatas=metadatas)
@@ -96,7 +116,10 @@ def upsert_articles_to_chroma(articles):
 
 def retrieve_relevant_articles(query, k=3):
     try:
-        query_embedding = embedding_model.encode([query]).tolist()[0]
+        query_embedding = get_openai_embedding(query)
+        if not query_embedding:
+            st.error("Failed to generate embedding for the query.")
+            return [], []
         results = collection.query(query_embeddings=[query_embedding], n_results=k)
         if results and results["documents"]:
             docs = results["documents"][0]
