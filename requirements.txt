@@ -1,0 +1,6 @@
+streamlit==1.40.2
+requests==2.32.3
+pillow==11.0.0
+openai==0.27.8
+bcrypt==4.0.1
+python-dotenv==1.0.0
