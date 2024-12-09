@@ -57,7 +57,6 @@ NEWS_APIS = {
             for article in data.get("articles", [])[:limit]
         ]
     }
-}
 
 def fetch_news_autonomously(query, limit=5):
     articles = []
