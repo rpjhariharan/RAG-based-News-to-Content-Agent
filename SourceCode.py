@@ -35,7 +35,7 @@ def load_embedding_model():
 
 embedding_model = load_embedding_model()
 
-# Define multiple News APIs (Ensure all sources have valid APIs)
+# Define NewsAPI only
 NEWS_APIS = {
     "NewsAPI": {
         "url": "https://newsapi.org/v2/everything",
@@ -44,19 +44,8 @@ NEWS_APIS = {
         "parse": lambda data: [
             {**article, "source": "NewsAPI"} for article in data.get("articles", [])
         ]
-    },
-        "parse": lambda data: [
-            {
-                "title": article.get("title"),
-                "description": article.get("body"),
-                "url": article.get("url"),
-                "content": article.get("body", ""),
-                "urlToImage": article.get("image"),
-                "source": "EventRegistry"
-            }
-            for article in data.get("articles", [])[:limit]
-        ]
     }
+}
 
 def fetch_news_autonomously(query, limit=5):
     articles = []
