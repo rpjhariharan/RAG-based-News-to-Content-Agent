@@ -3,7 +3,6 @@ import requests
 import os
 from PIL import Image
 from io import BytesIO
-from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
@@ -11,28 +10,26 @@ import openai
 from datetime import datetime, timedelta
 import bcrypt
 
-# Load environment variables from .env file
-load_dotenv()
 
 # Set Streamlit page configuration as the very first Streamlit command
 st.set_page_config(page_title="RAG-based Content Generator", layout="wide")
 
 # API Keys and Credentials
-HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
-BING_API_KEY = os.getenv("BING_API_KEY")
-NYTIMES_API_KEY = os.getenv("NYTIMES_API_KEY")
-GUARDIAN_API_KEY = os.getenv("GUARDIAN_API_KEY")
-BBC_API_KEY = os.getenv("BBC_API_KEY")
-REUTERS_API_KEY = os.getenv("REUTERS_API_KEY")
-NEWSDATA_API_KEY = os.getenv("NEWSDATA_API_KEY")
-MEDIASTACK_API_KEY = os.getenv("MEDIASTACK_API_KEY")
-CONTEXTUALWEB_API_KEY = os.getenv("CONTEXTUALWEB_API_KEY")
-EVENTREGISTRY_API_KEY = os.getenv("EVENTREGISTRY_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-IMGFLIP_USERNAME = os.getenv("IMGFLIP_USERNAME")
-IMGFLIP_PASSWORD = os.getenv("IMGFLIP_PASSWORD")
-VIDEO_API_KEY = os.getenv("VIDEO_API_KEY")  # For video generation API
+HUGGINGFACE_API_TOKEN = st.secrets("HUGGINGFACE_API_TOKEN")
+NEWS_API_KEY = st.secrets("NEWS_API_KEY")
+BING_API_KEY = st.secrets("BING_API_KEY")
+NYTIMES_API_KEY = st.secrets("NYTIMES_API_KEY")
+GUARDIAN_API_KEY = st.secrets("GUARDIAN_API_KEY")
+BBC_API_KEY = st.secrets("BBC_API_KEY")
+REUTERS_API_KEY = st.secrets("REUTERS_API_KEY")
+NEWSDATA_API_KEY = st.secrets("NEWSDATA_API_KEY")
+MEDIASTACK_API_KEY = st.secrets("MEDIASTACK_API_KEY")
+CONTEXTUALWEB_API_KEY = st.secrets("CONTEXTUALWEB_API_KEY")
+EVENTREGISTRY_API_KEY = st.secrets("EVENTREGISTRY_API_KEY")
+OPENAI_API_KEY = st.secrets("OPENAI_API_KEY")
+IMGFLIP_USERNAME = st.secrets("IMGFLIP_USERNAME")
+IMGFLIP_PASSWORD = st.secrets("IMGFLIP_PASSWORD")
+VIDEO_API_KEY = st.secrets("VIDEO_API_KEY")  # For video generation API
 
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
