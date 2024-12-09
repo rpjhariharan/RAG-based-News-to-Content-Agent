@@ -2,8 +2,6 @@ import streamlit as st
 import requests
 from PIL import Image
 from io import BytesIO
-import chromadb
-from chromadb.config import Settings
 import openai
 from datetime import datetime, timedelta
 import bcrypt
@@ -12,47 +10,16 @@ import bcrypt
 st.set_page_config(page_title="RAG-based Content Generator", layout="wide")
 
 # Access API Keys and Credentials from Streamlit Secrets
-NEWS_API_KEY = st.secrets["news_api_key"]
-OPENAI_API_KEY = st.secrets["openai_api_key"]
-IMGFLIP_USERNAME = st.secrets.get("imgflip_username", "")
-IMGFLIP_PASSWORD = st.secrets.get("imgflip_password", "")
-VIDEO_API_KEY = st.secrets.get("video_api_key", "")  # For video generation API
+NEWS_API_KEY = st.secrets["NEWS_API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+IMGFLIP_USERNAME = st.secrets.get("IMGFLIP_USERNAME", "")
+IMGFLIP_PASSWORD = st.secrets.get("IMGFLIP_PASSWORD", "")
+VIDEO_API_KEY = st.secrets.get("VIDEO_API_KEY", "")  # For video generation API
 
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
 
-# Initialize local Chroma DB for vector storage
-client = chromadb.Client(Settings(
-    persist_directory=".chromadb"  # Directory to persist the database
-))
-collection = client.get_or_create_collection("news_articles")
-
-# Function to generate embeddings using OpenAI's Embedding API
-def get_openai_embeddings(texts):
-    try:
-        response = openai.Embedding.create(
-            input=texts,
-            model="text-embedding-ada-002"
-        )
-        embeddings = [data['embedding'] for data in response['data']]
-        return embeddings
-    except Exception as e:
-        st.error(f"Error generating embeddings with OpenAI: {e}")
-        return []
-
-def get_openai_embedding(text):
-    try:
-        response = openai.Embedding.create(
-            input=text,
-            model="text-embedding-ada-002"
-        )
-        embedding = response['data'][0]['embedding']
-        return embedding
-    except Exception as e:
-        st.error(f"Error generating embedding with OpenAI: {e}")
-        return []
-
-# Define NewsAPI only
+# Define NewsAPI
 NEWS_APIS = {
     "NewsAPI": {
         "url": "https://newsapi.org/v2/everything",
@@ -63,6 +30,7 @@ NEWS_APIS = {
         ]
     }
 }
+
 
 def fetch_news_autonomously(query, limit=5):
     articles = []
@@ -100,35 +68,6 @@ def sanitize_metadata(metadata):
         else:
             sanitized[key] = str(value)
     return sanitized
-
-def upsert_articles_to_chroma(articles):
-    try:
-        texts = [a.get('content', '') for a in articles]
-        embeddings = get_openai_embeddings(texts)
-        if not embeddings:
-            st.error("Failed to generate embeddings for the articles.")
-            return
-        ids = [f"doc_{i}_{int(datetime.now().timestamp())}" for i in range(len(articles))]  # Unique IDs
-        metadatas = [sanitize_metadata(a) for a in articles]
-        collection.add(documents=texts, embeddings=embeddings, ids=ids, metadatas=metadatas)
-    except Exception as e:
-        st.error(f"Error upserting articles to ChromaDB: {e}")
-
-def retrieve_relevant_articles(query, k=3):
-    try:
-        query_embedding = get_openai_embedding(query)
-        if not query_embedding:
-            st.error("Failed to generate embedding for the query.")
-            return [], []
-        results = collection.query(query_embeddings=[query_embedding], n_results=k)
-        if results and results["documents"]:
-            docs = results["documents"][0]
-            meta = results["metadatas"][0]
-            return docs, meta
-        return [], []
-    except Exception as e:
-        st.error(f"Error retrieving articles from ChromaDB: {e}")
-        return [], []
 
 def generate_image(prompt_text):
     if OPENAI_API_KEY:
@@ -361,7 +300,6 @@ def main():
             with st.spinner("Fetching news articles..."):
                 articles = fetch_news_autonomously(query, limit=5)
                 if articles:
-                    upsert_articles_to_chroma(articles)
                     st.success(f"Fetched {len(articles)} articles successfully.")
                 else:
                     st.info("No articles found from the news sources. Generating fallback content based on your input.")
@@ -395,43 +333,40 @@ def main():
                     st.write("No external sources were used to generate this content.")
                     st.stop()
 
-            with st.spinner("Retrieving relevant articles..."):
-                docs, meta = retrieve_relevant_articles(query, k=3)
-                if not docs:
-                    st.info("No relevant articles found in the database. Generating fallback content based on your input.")
-                    fallback_text = generate_fallback_content(query, tone, platform)
-                    st.session_state.history.append({
-                        "query": query,
-                        "tone": tone,
-                        "format_type": format_type,
-                        "platform": platform,
-                        "content": fallback_text,
-                        "citations": []
-                    })
-                    increment_rate_limit(username)
-                    st.markdown("### Generated Content:")
-                    if format_type == "Text":
-                        st.write(fallback_text)
-                    elif format_type == "Image":
-                        img_url = generate_image(f"Create a {tone.lower()} image based on: {fallback_text}")
-                        st.image(img_url, use_container_width=True)
-                        st.download_button("Download Image", requests.get(img_url).content, "image.png")
-                    elif format_type == "Meme":
-                        meme_caption = f"{tone} meme about {query}"
-                        meme_url = generate_meme(meme_template, meme_caption)
-                        st.image(meme_url, use_column_width=True)
-                        st.download_button("Download Meme", requests.get(meme_url).content, "meme.png")
-                    elif format_type == "Video":
-                        video_url = generate_video(fallback_text)
-                        st.video(video_url)
-                        st.download_button("Download Video", requests.get(video_url).content, "video.mp4")
-                    st.markdown("### Citations:")
-                    st.write("No external sources were used to generate this content.")
-                    st.stop()
-                else:
-                    st.success(f"Retrieved {len(docs)} relevant articles.")
+            # Combine the content of all articles
+            combined_text = " ".join([article.get('content', '') for article in articles if article.get('content')])
 
-            combined_text = " ".join(docs)
+            if not combined_text.strip():
+                st.info("Fetched articles have no content. Generating fallback content based on your input.")
+                fallback_text = generate_fallback_content(query, tone, platform)
+                st.session_state.history.append({
+                    "query": query,
+                    "tone": tone,
+                    "format_type": format_type,
+                    "platform": platform,
+                    "content": fallback_text,
+                    "citations": []
+                })
+                increment_rate_limit(username)
+                st.markdown("### Generated Content:")
+                if format_type == "Text":
+                    st.write(fallback_text)
+                elif format_type == "Image":
+                    img_url = generate_image(f"Create a {tone.lower()} image based on: {fallback_text}")
+                    st.image(img_url, use_container_width=True)
+                    st.download_button("Download Image", requests.get(img_url).content, "image.png")
+                elif format_type == "Meme":
+                    meme_caption = f"{tone} meme about {query}"
+                    meme_url = generate_meme(meme_template, meme_caption)
+                    st.image(meme_url, use_column_width=True)
+                    st.download_button("Download Meme", requests.get(meme_url).content, "meme.png")
+                elif format_type == "Video":
+                    video_url = generate_video(fallback_text)
+                    st.video(video_url)
+                    st.download_button("Download Video", requests.get(video_url).content, "video.mp4")
+                st.markdown("### Citations:")
+                st.write("No external sources were used to generate this content.")
+                st.stop()
 
             with st.spinner("Summarizing and rewriting content..."):
                 final_text = summarize_and_rewrite(combined_text, tone, platform)
@@ -441,7 +376,7 @@ def main():
                     "format_type": format_type,
                     "platform": platform,
                     "content": final_text,
-                    "citations": meta
+                    "citations": articles  # Optionally, store citations from fetched articles
                 })
                 increment_rate_limit(username)
 
@@ -462,11 +397,12 @@ def main():
                 st.video(video_url)
                 st.download_button("Download Video", requests.get(video_url).content, "video.mp4")
 
-            if meta:
+            # Show citations if available
+            if articles:
                 st.markdown("### Citations:")
-                for m in meta:
-                    if m.get("url"):
-                        st.markdown(f"- [Source: {m.get('title', 'Article')}]({m['url']})")
+                for article in articles:
+                    if article.get("url") and article.get("title"):
+                        st.markdown(f"- [Source: {article['title']}]({article['url']})")
             else:
                 st.markdown("### Citations:")
                 st.write("No external sources were used to generate this content.")
