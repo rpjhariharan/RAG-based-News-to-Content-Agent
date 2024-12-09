@@ -10,11 +10,11 @@ import bcrypt
 st.set_page_config(page_title="RAG-based Content Generator", layout="wide")
 
 # Access API Keys and Credentials from Streamlit Secrets
-NEWS_API_KEY = st.secrets["news_api_key"]
-OPENAI_API_KEY = st.secrets["openai_api_key"]
-IMGFLIP_USERNAME = st.secrets.get("imgflip_username", "")
-IMGFLIP_PASSWORD = st.secrets.get("imgflip_password", "")
-VIDEO_API_KEY = st.secrets.get("video_api_key", "")  # For video generation API
+NEWS_API_KEY = st.secrets["NEWS_API_KEY"]
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+IMGFLIP_USERNAME = st.secrets.get("IMGFLIP_USERNAME", "")
+IMGFLIP_PASSWORD = st.secrets.get("IMGFLIP_PASSWORD", "")
+VIDEO_API_KEY = st.secrets.get("VIDEO_API_KEY", "")  # For video generation API
 
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -30,6 +30,7 @@ NEWS_APIS = {
         ]
     }
 }
+
 
 def fetch_news_autonomously(query, limit=5):
     articles = []
