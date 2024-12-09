@@ -3,7 +3,6 @@ import requests
 import os
 from PIL import Image
 from io import BytesIO
-from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
 import openai
