@@ -1,9 +1,7 @@
 import streamlit as st
 import requests
-import os
 from PIL import Image
 from io import BytesIO
-from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 import chromadb
 from chromadb.config import Settings
@@ -11,18 +9,15 @@ import openai
 from datetime import datetime, timedelta
 import bcrypt
 
-
-
 # Set Streamlit page configuration as the very first Streamlit command
 st.set_page_config(page_title="RAG-based Content Generator", layout="wide")
 
-# API Keys and Credentials
-HUGGINGFACE_API_TOKEN = st.secrets("HUGGINGFACE_API_TOKEN")
-NEWS_API_KEY = st.secrets("NEWS_API_KEY")
-OPENAI_API_KEY = st.secrets("OPENAI_API_KEY")
-IMGFLIP_USERNAME = st.secrets("IMGFLIP_USERNAME")
-IMGFLIP_PASSWORD = st.secrets("IMGFLIP_PASSWORD")
-VIDEO_API_KEY = st.secrets("VIDEO_API_KEY")  # For video generation API
+# Access API Keys and Credentials from Streamlit Secrets
+NEWS_API_KEY = st.secrets["news_api_key"]
+OPENAI_API_KEY = st.secrets["openai_api_key"]
+IMGFLIP_USERNAME = st.secrets.get("imgflip_username", "")
+IMGFLIP_PASSWORD = st.secrets.get("imgflip_password", "")
+VIDEO_API_KEY = st.secrets.get("video_api_key", "")  # For video generation API
 
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -40,24 +35,8 @@ def load_embedding_model():
 
 embedding_model = load_embedding_model()
 
-# Define multiple News APIs
+# Define multiple News APIs (Ensure all sources have valid APIs)
 NEWS_APIS = {
-    "Bing News Search": {
-        "url": "https://api.cognitive.microsoft.com/bing/v7.0/news/search",
-        "headers": {"Ocp-Apim-Subscription-Key": BING_API_KEY},
-        "params": lambda query, limit: {"q": query, "mkt": "en-US", "count": limit},
-        "parse": lambda data: [
-            {
-                "title": item.get("name"),
-                "description": item.get("description"),
-                "url": item.get("url"),
-                "content": item.get("description", ""),
-                "urlToImage": item.get("image", {}).get("thumbnail", {}).get("contentUrl") if item.get("image") else None,
-                "source": "Bing News Search"
-            }
-            for item in data.get("value", [])
-        ]
-    },
     "NewsAPI": {
         "url": "https://newsapi.org/v2/everything",
         "headers": {},
@@ -66,114 +45,6 @@ NEWS_APIS = {
             {**article, "source": "NewsAPI"} for article in data.get("articles", [])
         ]
     },
-    "The New York Times": {
-        "url": "https://api.nytimes.com/svc/search/v2/articlesearch.json",
-        "headers": {},
-        "params": lambda query, limit: {"q": query, "api-key": NYTIMES_API_KEY, "page": 0},
-        "parse": lambda data: [
-            {
-                "title": doc.get("headline", {}).get("main"),
-                "description": doc.get("abstract"),
-                "url": doc.get("web_url"),
-                "content": doc.get("lead_paragraph", ""),
-                "urlToImage": "https://static01.nyt.com/" + doc.get("multimedia", [{}])[0].get("url", "") if doc.get("multimedia") else None,
-                "source": "The New York Times"
-            }
-            for doc in data.get("response", {}).get("docs", [])[:limit]
-        ]
-    },
-    "The Guardian": {
-        "url": "https://content.guardianapis.com/search",
-        "headers": {},
-        "params": lambda query, limit: {"q": query, "api-key": GUARDIAN_API_KEY, "page-size": limit, "show-fields": "thumbnail,headline,body"},
-        "parse": lambda data: [
-            {
-                "title": item.get("fields", {}).get("headline"),
-                "description": item.get("fields", {}).get("body")[:200],  # First 200 chars
-                "url": item.get("webUrl"),
-                "content": item.get("fields", {}).get("body", ""),
-                "urlToImage": item.get("fields", {}).get("thumbnail"),
-                "source": "The Guardian"
-            }
-            for item in data.get("response", {}).get("results", [])
-        ]
-    },
-    "BBC News": {
-        "url": "https://newsapi.org/v2/top-headlines",
-        "headers": {},
-        "params": lambda query, limit: {"q": query, "apiKey": BBC_API_KEY, "pageSize": limit, "sources": "bbc-news"},
-        "parse": lambda data: [
-            {
-                "title": article.get("title"),
-                "description": article.get("description"),
-                "url": article.get("url"),
-                "content": article.get("description", ""),
-                "urlToImage": article.get("urlToImage"),
-                "source": "BBC News"
-            }
-            for article in data.get("articles", [])
-        ]
-    },
-    "NewsData.io": {
-        "url": "https://newsdata.io/api/1/news",
-        "headers": {},
-        "params": lambda query, limit: {"apikey": NEWSDATA_API_KEY, "q": query, "language": "en", "page_size": limit},
-        "parse": lambda data: [
-            {
-                "title": item.get("title"),
-                "description": item.get("description"),
-                "url": item.get("link"),
-                "content": item.get("description", ""),
-                "urlToImage": item.get("image_url"),
-                "source": "NewsData.io"
-            }
-            for item in data.get("results", [])
-        ]
-    },
-    "Mediastack": {
-        "url": "http://api.mediastack.com/v1/news",
-        "headers": {},
-        "params": lambda query, limit: {"access_key": MEDIASTACK_API_KEY, "keywords": query, "languages": "en", "limit": limit},
-        "parse": lambda data: [
-            {
-                "title": item.get("title"),
-                "description": item.get("description"),
-                "url": item.get("url"),
-                "content": item.get("description", ""),
-                "urlToImage": item.get("image"),
-                "source": "Mediastack"
-            }
-            for item in data.get("data", [])
-        ]
-    },
-    "ContextualWeb News": {
-        "url": "https://contextualwebsearch-websearch-v1.p.rapidapi.com/api/Search/NewsSearchAPI",
-        "headers": {
-            "X-RapidAPI-Key": CONTEXTUALWEB_API_KEY,
-            "X-RapidAPI-Host": "contextualwebsearch-websearch-v1.p.rapidapi.com"
-        },
-        "params": lambda query, limit: {"q": query, "pageNumber": "1", "pageSize": limit, "autoCorrect": "true"},
-        "parse": lambda data: [
-            {
-                "title": item.get("title"),
-                "description": item.get("description"),
-                "url": item.get("url"),
-                "content": item.get("description", ""),
-                "urlToImage": item.get("imageUrl"),
-                "source": "ContextualWeb News"
-            }
-            for item in data.get("value", [])
-        ]
-    },
-    "EventRegistry": {
-        "url": "https://eventregistry.org/api/v1/article/getArticles",
-        "headers": {},
-        "params": lambda query, limit: {
-            "apiKey": EVENTREGISTRY_API_KEY,
-            "keywords": query,
-            "lang": "eng",
-            "count": limit
-        },
         "parse": lambda data: [
             {
                 "title": article.get("title"),
@@ -208,8 +79,10 @@ def fetch_from_source(source, query, limit=5):
             articles = api["parse"](data)
             return articles[:limit] if articles else []
         else:
+            st.warning(f"Failed to fetch from {source}: Status code {response.status_code}")
             return []
     except Exception as e:
+        st.warning(f"Error fetching from {source}: {e}")
         return []
 
 def sanitize_metadata(metadata):
@@ -304,7 +177,7 @@ def generate_video(prompt_text):
 def summarize_and_rewrite(content, tone, platform):
     try:
         response = openai.ChatCompletion.create(
-            model="o1-preview",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that summarizes and rewrites content."},
                 {"role": "user",
@@ -322,7 +195,7 @@ def summarize_and_rewrite(content, tone, platform):
 def generate_fallback_content(query, tone, platform):
     try:
         response = openai.ChatCompletion.create(
-            model="o1-preview",
+            model="gpt-4",
             messages=[
                 {"role": "system",
                  "content": "You are a creative assistant that generates content based on user input."},
@@ -340,7 +213,7 @@ def generate_fallback_content(query, tone, platform):
 def suggest_hashtags(query, platform):
     try:
         response = openai.ChatCompletion.create(
-            model="o1-preview",
+            model="gpt-4",
             messages=[
                 {"role": "system",
                  "content": "You are an assistant that suggests relevant hashtags for social media posts."},
